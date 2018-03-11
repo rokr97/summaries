@@ -1,5 +1,9 @@
 = Silicon Valley Chainsaw Massacre
-@jbaruch & @ligolnik @ DelEx, Minsk, Feb 2018
+
+== Origin
+https://www.youtube.com/watch?v=utNoNNciMds[Baruch Sadogursky & Leonid Igolnik @ DelEx, Minsk, Feb 2018]
+
+Как преодолеть боль саппорта в понедельник после дежурства на выходных.
 
 == Logs
 Вместо доступа к логам - аггрегаторы (`logstash`, `loggly`, `splunk`). все они умеют маскировать sensitive data.
@@ -56,4 +60,28 @@ TIP: Use tickets instead of voice messaging
 * this will take time
 * start with senior folks
 * find intitial partner in peer teams
-* * start small
+* start small
+
+== Reactive improvement
+Detect -> Fix -> Monitor -> Detect...
+
+NOTE: "Drive" - a book that tells about what motivates people
+
+Three main drives:
+
+* Autonomy
+* Mastery
+* Purpose
+
+== Q&A
+[qanda]
+Как понять, что мы делаем неправильно, если страдаем каждые 2-3 недели?::
+  Рассказывать команде, что всё движется в лучшую сторону, показывая данные, стату по звонкам, дефектам и т.п. Задаться вопросом: "стало ли сейчас легче дежурить, чем два месяца назад?"
+
+Как поддерживать документацию (инструкции, ранбуки) в актуальном состоянии?::
+  [.line-through]#Никак#. Практиковаться чаще. Процесс повторения заставляет улучшать.
+
+[quote]
+____
+Если это больно, делай это чаще
+____
