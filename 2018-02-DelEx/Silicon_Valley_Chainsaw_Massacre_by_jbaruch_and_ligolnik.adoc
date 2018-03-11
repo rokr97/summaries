@@ -1,1 +1,59 @@
-/home/rokr/Documents/Summaries/DelEx 2018 - Silicon valley massacre.adoc
+= Silicon Valley Chainsaw Massacre
+@jbaruch & @ligolnik @ DelEx, Minsk, Feb 2018
+
+== Logs
+Вместо доступа к логам - аггрегаторы (`logstash`, `loggly`, `splunk`). все они умеют маскировать sensitive data.
+
+* search &amp; aggregation tools
+* data masking
+* alerting capabilities
+
+<<<
+*NOC*:: network operations center.
+
+== Well-defined severity definitions
+* Who sets the severity:
+** support
+** customer
+* Expected SLA
+* Update frequency expectations
+
+TIP: Use tickets instead of voice messaging
+
+== Effective reachability
+* Virtual extensions (8-911 reaches person on duty), etc
+* Escalation chat has two approaches:
+** one room for all escalation
+** one room per support ticket
+ * Virtual phone bridge. http://company.zoom.com/emergency could be used, for example.
+
+== Escalation path
+* Who do you wake and when?
+* How do you reach them?
+* All the way to the CEO
+
+== Manager on-call
+* External communications
+* Activities coordination
+* Resource management
+
+== Production access
+* Ability to deploy hotfixes
+* Documented steps for:
+** debug
+** log level changes
+
+== Effective shift handover
+* Pick a standard day of week/time
+
+== Other barriers
+* Training
+* Certification (with financial benefits)
+* Knowledge transfer / runbook
+
+
+== Getting started with on-call
+* this will take time
+* start with senior folks
+* find intitial partner in peer teams
+* * start small
