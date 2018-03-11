@@ -1,0 +1,111 @@
+= No container: a Modern Java Stack with Bootique.io
+
+== Origin
+https://www.youtube.com/watch?v=uxB3SC98BNA[Андрусь Адамчик @ Joker 2016]
+
+== Overview
+`--bq.trace`:: VM опция для подробного вывода чо там бутик наподключал
+bootique-bom:: штоп версии не прописывать
+bootique-logback:: логгирование
+
+NOTE: бутик не делает convention-over-configuration, т.к. позволяет интегрировать любые модули
+
+== Live Code Demo
+[source, java]
+DemoModule implements google.juice.Module {
+  @Override configure(Binder binder) {
+    JerseyModule
+      .contributePackages(binder)
+      .addBinding()
+      .toInstance(DemoApi.class.getPackage());
+  }
+}
+
+подключается модуль через `ServiceLoader` в `resources/META-INF/services`
+
+[source, java]
+DemoModuleProvider : BQModuleProvider {
+  override fun module: Module = new DemoModule()
+}
+
+./services/io.bootique.BQModuleProvider
+----
+bq.demo.DemoModuleProvider
+----
+
+Добавил в pom +
+`bootique-cayenne` +
+`mysql-connector-java`
+
+в `DemoApi` добавляет
+[source, java]
+@Inject
+private ServerRuntime runtime
+
+Создает `demo.yml` в корне проекта (рядом с `pom.xml`), где прописывает коннект к базе
+[source, yaml]
+jdbc:
+  schedule:
+    url: "jdbc:mysql://host:port/schedule?connectTimeout=0&autoReconnect=true"
+  initialSize: 1
+  username: root
+  password: root
+
+
+В Intellij IDEA идет в`Edit Configuration` -> `Program arguments`, добавляет
+----
+--server --config=demo.yml
+----
+
+Добавляет `io.bootique.linkrest:bootique-linkrest`
+
+Идет в `DemoApi`, выбрасывает всё, что относилось к Cayenne
+
+linkrest использует JAX-RS аннотации для injection:
+[source, java]
+----
+@Context
+private Configuration config;
+
+@GET
+@Produces(MedaiType.APPLICATION_JSON)
+public DataResponse<Game> get(@Context UriInfo uri) {
+ return LinkRest.select(Game.class, config).uri(uri).select();
+}
+----
+----
+localhost:8080?limit=5&include=homeTeam.name
+----
+
+== Интеграционное тестирование
+
+Подключает `bootique-jetty-test`, `bootique-cayenne-test` модули
+
+в тест-классе создает
+[source, java]
+----
+@Rule
+public JettyTestFactory testFactory = new JettyTestFactory();
+
+@Test
+public void testGet() {
+	BQTestRuntime testRuntime = testFactory.app("--config=demo-test.yml").autoloadModules().start();
+
+	DatabaseChannel channel = DatabaseChannel.get(testRuntime);
+	...
+	Response response = client
+		.target("http://localhost:8080")
+		.queryParam("include", "arena")
+		.request()
+		.get();
+}
+----
+.demo-test.yml
+[source, yaml]
+----
+jdbc:
+  schedule:
+    url: "jdbc:derby:target/testdb;create=true"
+  initialSize: 1
+  username: root
+----
