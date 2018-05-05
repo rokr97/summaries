@@ -1,0 +1,526 @@
+= Перенимаем опыт Google в построении микросервисов с gRPC
+
+== Origin
+https://www.youtube.com/watch?v=zPbaKUIcFx0[@aiborisov @ JokerConf 2017]
+
+gRPC — высокопроизводительный фреймворк для удалённого вызова процедур. Как он помогает построить реактивную микросервисную архитектуру, каковы причины выбрать его и сценарии использования?
+
+== History
+RPC (and AMF, RMI, CORBA) are prejudiced by some devs. Don't worry, gRPC is not a RMI.
+Stubby was an RPC in Google's microservices long before they became cool. There were several generation of it, each solving some problems of the predecessor.
+Stubby evolution (scalability > performance > ease of use > ease of support) resulted in gRPC, which came out in 2015 as an open-sourced verion of Stubby.
+
+== What is gRPC
+**G**oogle **R**emote **P**rocedure **C**alls.+
+gRPC is
+
+* a set of best practices and abstractions required to build distributed systems; includes default implementations and extension points
+* a high performance framework for RPC
+* a part of the https://cncf.io[Cloud Native Computing Foundation]
+* using HTTP/2
+
+== Performance
+* **~O(10^10^) QPS** +
+* https://grpc.io/docs/guides/benchmarking.html[Continuous perfomance monitoring of the latest builds]. Here you can find guides on how to benchmark your needs.
+* Main source of performance boost is a HTTP/2 protocol.
+* Check http://www.hhtp2demo.io or https://http2.golang.org/gophertiles to see the difference between HTTP 1.1 and HTTP/2.
+* 6 TCP connections in HTTP/1.x and 6 max parallel tiles download vs 1 TCP and all 180 tiles parallel download in HTTP/2. And HTTP/2 does it much faster.
+
+== Weather report service example
+(All samples are available on github)
+First entity you encounter is a description/specification of your API. gRPC uses (but not limiting) Protocol Buffers 3.0 (ProtoBuf) - Google's open-sources serialization protocol.
+
+=== Describe API
+.weather.proto
+[source, protobuf]
+----
+syntax = "proto3"
+
+option java_multiple_files=true;
+option java_package="ru.jokerconf.grpcexample"
+
+service WeatherService {
+  rpc getCurrent(WhetherRequest) returns (WeatherResponse);
+}
+
+message WeatherRequest {
+  Coordinates coordinates = 1;
+
+  message Coordinates {
+    fixed64 latitude = 1;
+    fixed64 longitude = 2;
+  }
+}
+
+message WeatherResponse {
+  Temperature temperature = 1;
+  Humidity humidity = 2
+}
+
+message Temperature {
+  float degrees = 1;
+  Units units = 2;
+
+  enum Units {
+    FAHRENHEIT = 0;
+    CELS = 1;
+  }
+}
+
+message Humidity {
+  float value = 1;
+}
+----
+
+Having this definition you don't need to check controllers to discrover API or use Swagger.
+
+=== Generate sources
+Second step is to pass this protobuf definition to a gRPC runtime (in our case - gRPC java Runtime) either through CLI or build system plugin.
+This will generate service implementation classes, request, response value objects and client libraries (Stub, FutureStub, BlockingStub).
+
+=== Build service
+Next, to implement the service we should extend this generated abstract service:
+.WheaterService.java
+[source, java]
+----
+public class WheaterService extends WeatherServiceImplBase {
+  @Override
+  public void getCurrent(WheaterRequest request, StreamObserver<WeatherResponse> responseObserver) {
+    WeatherResponse response = WeatherResponse.newBuilder()
+      .setTemperature(Temperature.newBuilder().setUnits(CELSIUS).setDegrees(20.0f))
+      .setHumidity(Humidity.newBuilder().setValue(.65f))
+      .build();
+
+      responseObserver.onNext(response);
+      responseObserver.onCompleted();
+  }
+}
+----
+
+gRPC - is a non-blocking API - we call responseObserver.onNext to send a response when it's ready. (Hollywood principle - we'll call you back)
+
+=== Run gRPC server
+.App.java
+[source, java]
+----
+Server grpcServer = NettyServerBuilder.forPort(8090)
+        .addService(new WeatherService.build())
+        .start();
+----
+
+=== Syncronous gRPC client
+.SyncGrpcClient.java
+[source, java]
+----
+ManagedChannel grpcChannel = NettyChannelBuilder.forAddress("localhost", 8090).build();
+
+WeatherServiceStub client = WeatherServiceGrpc.newStub(grpcChannel); // asynchronous client
+WeatherServiceBlockingStub blockingClient = WeatherServiceGrpc.newBlockingStub(grpcChannel); // blocks current channel/thread until we get the result
+WeatherServiceFutureStub futureClient = WeatherServiceGrpc.newFutureStub(grpcChannel); // asynchronous, Future-based client
+
+WeatherRequest request = WeatherRequest.newBuilder().
+      .setCoordinates(...)
+      .build();
+WeatherResponse response = blockingClient.getCurrent(request);
+logger.info("Current weather for {}: {}", request, response);
+----
+
+=== Asyncronous gRPC client
+.AsyncGrpcClient.java
+[source, java]
+----
+WeatherRequest request = WeatherRequest.newBuilder().
+      .setCoordinates(...)
+      .build();
+client.getCurrent(request, new StreamObserver<WeatherResponse>() {
+  @Override
+  public void onNext(WeatherResponse response) {
+    logger.info("Current weather for {}: {}", request, response);
+  }
+  public void onError() {...}
+  public void onCompleted() {...}
+});
+
+----
+
+=== Adding dependencies to our microservice
+.weather.proto
+[source, protobuf]
+----
+service WeatherService {
+  rpc GetCurrent(WhetherRequest) returns (WeatherResponse);
+}
+
+service TemperatureService {
+  rpc GetCurrent(Coordinates) returns (Temperature);
+}
+
+service HumidityService {
+  rpc GetCurrent(Coordinates) returns (Humidity);
+}
+
+service WindService {
+  rpc GetCurrent(Coordinates) returns (Wind);
+}
+
+message WeatherResponse {
+  Temperature temperature = 1;
+  Humidity humidity = 2;
+  Wind wind = 3;
+}
+...
+----
+
+NOTE: All fields in gRPC are optional, so adding new filds won't break old clients
+
+.Service with blocking clients
+[source,java]
+-----
+public class WeatherService(
+  val tempService : TemperatureServiceStub,
+  val humidityService : ...Stub,
+  val windService : ...Stub) : WeatherGrpc.WeatherImplBase {
+
+  fun getCurrent(request: WeatherRequest, responseObserver: ...) {
+    val temperature = tempService.getCurrent(request.coordinates)
+    val humidity = humidityService.getCurrent(request.coordinates)
+    val wind = windService.getCurrent(request.coordinates)
+
+    val response = WeatherResponse.newBuilder()
+        .setTemperature(temperature).setWind(wind).setHumidity(humidity).build()
+    responseObserver.onNext(response)
+    responseObserver.onCompleted
+  }
+}
+-----
+WARNING: Calling thread is blocked while all calls are made in sequence leading to long serving times and poor performance
+
+
+.Service with Future clients
+[source,java]
+-----
+public class WeatherService(
+  val tempService : TemperatureServiceFutureStub,
+  val humidityService : ...FutureStub,
+  val windService : ...FutureStub) : WeatherGrpc.WeatherImplBase {
+
+  fun getCurrent(request: WeatherRequest, responseObserver: ...) {
+    val coordinates = request.coordinates
+
+    val responsesFuture: ListenableFuture<List<WeatherResponse>> = Futures.allAsList(
+      Futures.transform(
+        tempService.getCurrent(
+          coordinates, {WeatherResponse.newBuilder().setTemperature(it).build()}
+        )
+      ),
+      Futures.transform(windService.getCurrent(
+        coordinates, {...setWind(it).build()})
+      )
+      Futures.transform(humidityService.getCurrent(
+        coordinates, {...setHumidity(it).build()})
+      )
+    )
+
+    Futures.addCallback(responsesFuture, new FutureCallback<List<WeatherResponse>>() {
+      override fun onSuccess(@Nullable val results: List<WeatherResponse>) {
+        val response = WeatherResponse.newBuilder()
+        results.forEach {it.mergeFrom()}
+        responseObserver.onNext(response)
+        responseObserver.onCompleted()
+      }
+
+      override fun onFailure(t: Throwable) { responseObserver.onError(t) }
+    })
+  }
+}
+-----
+
+Async is provided by **Netty** - async noblocking I/O
+
+* multiplexes connections: EpollEventLoopGroup, NioEventLoopGroup
+* unties I/O from the working threads
+* gRPC uses Netty for both server and client sides
+
+
+Netty uses the abstraction called **event loop**. The number of event loops is usually the same as the number of CPU available in JVM.
+
+Can we call `observer.onNext` several times before calling to `observer.onCompleted`?::
+Yes. We can add "stream"-modificator to our response to get streaming service, which notifies clients when its data changes.
+
+.weather.proto
+[source, protobuf]
+----
+service WeatherService {
+  rpc GetCurrent(WhetherRequest) returns (stream WeatherResponse);
+
+service TemperatureService {
+    rpc GetCurrent(Coordinates) returns (stream Temperature);
+  }
+...
+}
+----
+We can even make two-way streams by adding stream-modificator to an args of the services, i.e. if we are moving and our coordinates change we want to get weather updates.
+
+.weather.proto
+[source, protobuf]
+----
+service WeatherService {
+  rpc Observe(stream WhetherRequest) returns (stream WeatherResponse);
+
+service TemperatureService {
+    rpc Observe(stream Coordinates) returns (stream Temperature);
+  }
+...
+}
+----
+
+=== Two-way streaming service live demo
+* server includes all 3 StreamingServiceStubs
+* in the method `observe` it subscribes to all services
+* newStreamObserver method creates an observer where response in re-packed and sent immediately to the client when data changes
+
+.server.java
+[source, java]
+----
+override fun observe(responseObserver: StreamObserver<WeatherResponse>) : StreamObserver<WeatherRequest> {
+  val lock = new AutoClosable(new ReentrantLock())
+  val tempClientStream: StreamObserver<Coordinates>  = tempService.observe(
+        newStreamObserver(
+          responseObserver, lock, {Builder.setTemperature(it)}
+        )
+      )
+  val humidityClient = ...
+  val windClient = ...
+
+  val clientStreams = ImmutableList.copyOf(asList(tempClientStream, humidityClientStream, windClientStream))
+
+  return new StreamObserver<WeatherRequest>() {
+    override fun onNext(WeatherRequest) { clientStreams.forEach {it.onNext(request.getCoordinates())} }
+
+    override fun onError(t: Throwable) { clientStreams.forEach {it.onError(t)} }
+
+    override fun onCompleted(t: Throwable) { clientStreams.forEach {it.onCompleted()} }
+}
+----
+
+Client does all the same:
+
+* Create channel
+* Create non-blocking stub using this channel
+* And pass StreamObserver into this stub
+
+This concludes the demo of the simplest streaming server & client.
+
+== Streaming examples
+
+Does anybody needs such streaming?::
+  Most likely, yes. Because the world isn't static and all the project I've participated had such cases:
+  * multiuser chats
+  * online multiplayer game modes
+  * moving objects
+  * live sport results
+  * stock exchange rates
+  * sensor devices data
+
+== Compatibility
+What makes streaming even better is its performance compared to unary calls. Latest benchmark for Java Async Streaming RPC shows over 2 qps.
+
+gRPC support 10 programming languages: Java, Go, C/C++, C#, Node.js, PHP, Ruby, Python, Objective-C
+and 5 plaforms: MacOS, Linux, Windows, Android, iOS. +
+This compatibility allows us to:
+
+* write server and client independently using different platforms and languages.
+* write prototype in Python then switch to Java for production implementation and our clients won''t even know of such change.
+
+== Reliability?
+Our goal is to write a service in a way that it could handle all the errors and denials of other services that he relies upon and not bring down the whole system even when we are sure that the problem is not on our side.
+There are few simple rules:
+
+=== Use timeouts.
+Not so easy for microservices and cascade calls:
+* default timeouts - may lead to cascade denials
+* fine-tuned timeous for each microservice in a chain - doesn''t work well either
+
+==== gRPC Timeouts
+gRPC Java doesn''t support timeouts :( +
+BUT gRPC Java supports **deadlines**!
+
+[source,java]
+-----
+  val response = client.withDeadlineAfter(200, MILLISECONDS)
+                       .getCurrent(request);
+-----
+
+What is deadline?::
+Deadline - is an absolute time value. +
+Deadline tells microservice until which point in time client is okay to wait. +
+When deadline occurs, all RPC will receive an error with status = DEADLINE EXCEEDED.
+
+Deadlines are passed automatically, decreasing during the travel through the chain of calls. +
+Deadlines could be checked by the receiver. For example, to calculate remaining limit to set it as a timeout for a call in database. +
+If deadline exceeds, all chained network calls will be canceled automatically. +
+No need to manually calculate remaining deadlines for outgoing gRPC calls. +
+
+This was for expected cancels. What about unexpected? +
+There is automatic "cancellation propagation" OOB! This way server (receiver) always knows if request is active. By casting  streamObserver to ServerCallStreamObserver<T> interface we can always check
+
+* cancellation status in service via `streamObserver.isCancelled` method by casting.
+* subscribe to cancellation request: `streamObserver.setOnCancelHandler(() -> cleanupResources(); log.info("Call was cancelled by client!"))`
+
+
+== More control!?
+
+Two-way streaming:
+
+* slow client - too much responses to handle
+* slow server - too much requests to handle
+
+=== Flow control
+
+
+1. Client-side: request (up to N responses) - N responses
+2. Server-side: request - response (up to N request) - N requests
+
+==== Client-side flow control example
+
+.client.java
+[source, java]
+----
+val requestStream = (CallStreamObserver) client.observe(new ClientResponseObserver<WeatherRequest, WeatherResponse>() {
+  @Override
+  public void beforeStart(ClientCallStreamObserver outboundStream) {
+    outboundStream.disableAutoInboundFlowControl();
+  }
+  @Override
+  public onNext(WeatherResponse response) { processResponse(response); }
+  @Override
+  ...
+})
+
+requestStream.onNext(request);
+requestStream.request(3); // Request up to 3 responses from server
+----
+.server.java
+[source, java]
+----
+public class WeatherStreamingService extends WeatherGrpc.WeatherStreamingImplBase {
+  ...
+
+  @Override
+  public StreamObserver<WeatherRequest> observe(StreamObserver<WeatherResponse> responseObserver) {
+    ServerCallStreamObserver<WeatherResponse> streamObserver =
+        (ServerCallStreamObserver<WeatherResponse>) responseObserver;
+
+    streamObserver.setOnReadyHandler(() -> {
+      if (streamObserver.isReady()) {
+        streamObserver.onNext(calculateWeather());
+      }
+    })
+  }
+}
+----
+
+* Flow control helps balancing client and server capabilities. +
+* gRPC supports both client- and server-side flow control. +
+* Flow control is disabled by default.
+
+
+== What Else? Microservices issues.
+
+=== Service Discovery and load balancing
+
+Channel is a logical entity which is responsible of finding out which server instance to choose for the request.
+Channel uses strategies (NameResolver, LoadBalancer) to achieve that.
+[source, java]
+----
+ManagedChannel grpcChannel = NettyChannelBuilder.forTarget("WeatherSrv")
+                              .nameResolverFactory(new DnsNameResolverProvider())
+                              .loadBalancerFactory(RoundRobinLoadBalancerFactory.getInstance())
+                              .build();
+----
+
+Design documents:
+
+* https://github.com/grpc/grpc/blob/master/doc/load-balancing.md[load balancing in gRPC]
+* http://tiny.cc/grpc-java-lb-v2[gRPC Java Name Resolution and balancing]
+
+=== Testing
+gRPC provides OOB testing:
+
+* Server- and client-side in-process transport
+* StreamRecorder - StreamObserver that logs all values and errors
+* MetadataUtils - for testing headers and trailers
+* https://github.com/grpc/grpc-java/tree/master/testin[grpc-testing] - unit and integration testing utilities
+
+==== In-process transport example
+In-process transport is a fully functional transport for testing, which doesn''t create an actual network connection.
+[source, java]
+----
+WeatherServiceAsync weatherService = new WeatherServiceAsync(tempService, humidityService, windService);
+
+Server grpcServer = InProcessServerBuilder.forName("weather").addService(weatherService).build();
+
+Channel grpcChannel = InProcessChannelBuilder.forName("weather").build();
+
+WeatherServiceBlockingStub stub = WeatherServiceGrpc.newBlockingStub(grpcChannel).withDeadlineAfter(100, MILLISECONDS);
+----
+There is a JUnit rule which can setup & run in-process server.
+
+== N33D MOAR CAPABILITES!
+
+* Distributed tracing support: OpenTracing, Zipkin / Brave
+* Interceptors to add orthogonal functionality: client- and server-based. (like server interceptors in Spring, filters in servlets)
+* Monitoring: gRPC Prometheus, grpcz-monitoring
+* OOB authentification: SSL/TLS, token-based authorization with Google; authentication API
+* Compression - https://github.com/grpc/grpc/blob/master/doc/compression.md
+
+
+== Growing ecosystem and community
+
+https://github.com/grpc-ecosystem
+
+Polyglot - universal console grpc client
+
+grpc-gateway - generates reverse-proxy to translate RESTful JSON API to gRPC
+
+OpenTracing - a set of vendor-lock free APIs for distributed tracing and context propagation
+
+Prometheus - monitoring for grpc-java and gprc-go
+
+
+== gRPC quick start resources
+
+* grpc.io
+* https://github.com/grpc[gRPC on github]
+* https://github.com/alxbnet/jokerconf-grpc-demo[gRPC Demo]
+* grpc-io@googlegroups.com[Google group]
+* https://grpc.io/docs/quickstart/java.html[gRPC Java quickstart]
+* https://grpc.io/docs/tutorial/basic/java.html[gRPC Java tutorial]
+* https://github.com/grpc/grpc-contrib[gRPC contribution]
+
+== Q&A
+[qanda]
+Есть ли инструменты для gRPC, чтобы легко посмотреть содержимое запроса?::
+  1. Protobuf может переводить сообщения в JSON
+  2. Можно включить дебаг-режим в Netty (не для прода, для дев-окружений и т.п.) - все сообщения будут автоматом переводиться в JSON и выводиться в логи
+
+Cancellation летит вдогонку за изначальным запросом, т.е. всё равно будет задержка. Как глубоко лежащие сервисы узнают об отмене запроса?::
+  В http/2 есть специальный фрейм для отмены запроса - reset3. Он будет отправлен и это довольно быстро. gRPC не будет ждать следующего исходящего соединения, чтобы проверить: не отменен ли запрос?
+
+Есть ли какая-то реализация Circuit Breaker''а?::
+  Нет. Можно написать свой интерсептор, который будет это делать и подружить его с Hystrix, но ООВ реализаций нет.
+
+Каким-то образом решается вопрос аутентификации на уровне gRPC?::
+  В gRPC есть абстрации для аутентификации, авторизации, есть Call Credentials (которые я не показывал), не нужно руками ничего писать.
+
+Вопрос по дедлайнам: как решается вопрос синхронизации времени между серверами и как учитывается время на сетевое взаимодействие в рамках дедлайна?::
+  В контексте дедлайн пропагейшна это решено очень просто (не без недостатков, конечно): при передаче дедлайна передается само время, оставшееся до дедлайна, т.е. effectively вы передаете таймаут, поэтому время на сетевое взаимодействи не учитывается.
+
+Как красиво передавать метаданные в запросах между микросервисами?::
+  Метаданные реализованы в виде http/2 headers, поэтому они передаются в хэдерах. Еще в gRPC есть абстракции/классы, с помощью которых вы можете писать в и читать из метаданных (в т.ч. с помощью MetadataUtils).
+
+Как правильно версионировать интерфейсы?::
+  Вопрос лежит в несколько иной плоскости, gRPC никак его не решает, как таковой. И какого-то гайдлайна в gRPC нет.
+
+Какие гарантии доставки сообщения?::
+  Если стрим открыт и сервер не получил сообщение, то вы получите ошибку. Это не "fire and forget", нет такого, что вы отправили сообщение и дальше не слушаете, ваш gRPC-тракт(?) все равно открыт. Если сервис повис, то вы через какое-то время получите дедлайн.
