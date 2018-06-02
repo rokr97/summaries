@@ -1,0 +1,144 @@
+= Funny stories and anti-patterns from DevOps landscape
+
+== Origin
+https://www.youtube.com/watch?v=ZjAvj52BDiI[@xpinjection @ DelEx 2018, Minsk]
+
+== Story #1: Dedicated DevOps department
+Devs open tickets for DevOps to deploy code in production.
+Susceptible to corruption when a manager could talk DevOps into prioritizing his task over others.
+DevOps department is isolated from development and usually has its own goals: automatization, metrics, monitoring, etc.
+If department grows to 4-5 members they need a lead. When there's several team they need a manager.
+
+What's bad?::
+Local responsibility syndrome
+  - if my responsibility is development, then I only do the development and pass it further, when I don't care what's happening there.
+  - if I deployed something and it doesn't work - it's not my problem!
+
+Turns out working product is no one's goal.
+[quote]
+Works on my machine!
+
+[quote]
+Works fine in dev @ Ops problem now
+
+Devs want to maximize change, ops want to maximize stability.
+
+devs |=| devops |=| operations
+With DevOps department the number of walls increased.
+
+== Story #2: We hired DevOps Engineer
+A DevOps is treated like a magician who'll turn things to good.
+Side who desperately wants to hire a DevOps is unable to hire a competent specialist it doesn't know what characterizes good DevOps Engineer. It hopes for the magic to come.
+If you hire a person without knowing how he will contribute to the overall success and how he'll work with the team, then you might not get what you want.
+[quote]
+Full engagement is key to success
+
+Skills that are rarely posted in DevOps vacancies:
+
+* Excellent communication skills
+* NFR
+* Ability to work with Product Owner
+
+When we hire the right person, we expect him to bring additional value on all stages of development lifecycle:
+
+* Planning: NFRs
+  - Useful troubleshooting log / Key metrics
+  - Deployment / supervision concerns
+  - Degraded modes / Undo-Redo operations
+* Development: non-functional tests
+  - Automated technical tests
+  - Integrated in build process
+  - Continuous Deployment
+  - How to build CI and automatization enviroments
+- Technical Operation
+  - Performance and technical problems
+
+All the above work involves communication.
+
+== Story #3: Renaming Ops to DevOps
+Former sysadmins are more interested in infrastructure automatization then in communication with developers and involvement in their processes.
+Not only such people do not fit in DevOps paradigm, they physically do not want to be involved in it and don't see it as a part of their job.
+
+DevOps is the intersection of Dev, QA, Ops, etc It should help moving towards the common goal - a good quality working product.
+DevOps should help raising a culture of collaboration by being a middle-man working alongside dev and ops, giving and driving the tools to improve, simplify and speed up their work. For example:
+
+- Infrastructure as a code passes infrastructure management to developers by providing tools that makes it work easier.
+- Continuous delivery, on the other hand, becomes developer's initiative as it is in his benefit to speed up code deployments to environments.d
+- Culture of collaboration, to sum it all
+
+== What jobs relate (or being renamed) to DevOps?
+
+* Infrastructure Engineer
+* Cloud Infrastructure Engineer
+* Infrastructure Services Engineer (auth, api gateways, etc. services that being used by other services)
+* Site Reliability Engineer (hyped by Google, becomes that magical "DevOps Engineer")
+* Support Engineer
+* Release Engineer
+
+== Story #4: We have DevOps tools in place
+Problems:
+* Do you have CI? - "Yes, we have Jenkins somewhere"
+* A trend where CI being replaced by CI/CD for no particular reason
+ "We have automated everything using Chef". Next day rewrote it to Ansible, then the day after Terraform came out - moved to it. Now we are "true DevOps"
+
+ But nothing changes when we use differen tool. The main goal to *integrate* things: developer/build tools to build CI pipeline and Ops/deploy tools to add CD part
+
+ DevOps Enabler Tools v2 shows the most trending tools divided by categories:
+ * Infra-as-Code
+ * CI/CD
+ * Test Automation
+ * Container
+ * Orchestration
+ * Deployment
+ * Measurement
+ * ChatOps
+
+But there's a caution sign: consider only after DevOps mindset is established
+
+
+== Story #5: Blame-driven incident management
+Problem:
+* devs blame ops that they can't deploy properly because everything works
+* ops blame devs that they are unable to give them stable build. ops are deploying only what they are given by devs
+
+And it becomes that incidents are nobody's responsibility.
+
+Have you tried setting up a repository or a knowledge base to accumulate incident reports and solution?::
+Ain't nobody got time for this! We are busy resolving incidents.
+
+The irony is that Incident Management Lifecycle is one of the most stable and documented processes/workflows. Use it. Really.
+
+== Story #6: End-to-end developer
+Fisrt problem:
+* "No Ops" trend: "there's video for that", "instruction for this", etc.
+
+Yes, it may work on a small project with a small team.
+But there could be no slack to improve the process (or to even learn how to improve). And tools and practices become obsolete very fast nowadays. That's why a project most likely will benefit from dedicated "DevOps-guy", who's responsibility is to improve and speed up development-deployment cycles.
+And to scale it to a bigger team, bigger project requires people to know much more about frontend, backend and infra than it used to be 10 years ago where you were ok with JQuery (and a couple of libs) + Java EE (plus some Spring)
+
+Second problem:
+* Threshold for dev-newbies is at the all-time low and, at the same time, we see much more less experienced, good quality software engineers who understand what's going on "under the hood"
+
+If a persong is not that good with code, then it is not a surprise that they will be not so good with infrastructure (if it's left for themselves)
+
+== Story #7: Diversity, diversity everywhere
+"Effective DevOps" by O'Reilly is all about diversity, but not DevOps.
+
+== Summary
+* Change and grow DevOps culture, not job titles
+* Share responsibility and accountability for success
+* Work as a team at all stages of development lifecycle
+* Prefer specialization for complex activities (T-shape)
+* Use right tools to maximize automation level
+* Establish reliable incident management workflow
+* Think about diversity, but not on the first place
+
+Success is always in team work.
+
+== What to read
+* DevOps Handbook
+* Site Reliability Engineering
+* Release It! 2.0
+* The Phoenix Project
+* Continuous Delivery
+* Lean Software Development: An Agile Toolkit
